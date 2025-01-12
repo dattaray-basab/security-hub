@@ -56,9 +56,13 @@ func RunJWTServer() {
 			return
 		}
 
-		userID, ok := claims[string(SubjectKey)].(string)
-		if !ok {
-			http.Error(w, "Invalid user ID", http.StatusUnauthorized)
+		subjectKey, ok := claims[string(SubjectKey)].(string)
+		if !ok  {
+			http.Error(w, "Invalid subject key", http.StatusUnauthorized)
+			return
+		}
+		if subjectKey != "test-subject" {
+			http.Error(w, "Invalid subject key", http.StatusUnauthorized)
 			return
 		}
 
