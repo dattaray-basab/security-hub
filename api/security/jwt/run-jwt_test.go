@@ -50,7 +50,7 @@ func TestRunJWTServer(t *testing.T) {
 	// Wait a moment for the server to start
 	time.Sleep(1 * time.Second)
 
-	// Test the /generate endpoint
+	// Test the /generate endpoint (valid token)
 	resp, err := http.Get("http://localhost:8081/generate")
 	if err != nil {
 		t.Fatalf("Error making GET request: %v", err)
@@ -82,25 +82,135 @@ func TestRunJWTServer(t *testing.T) {
 	token = fmt.Sprintf("Bearer %s", token)
 	fmt.Println("Generated Token:", token)
 
-	// Test the /protected endpoint (with a valid JWT)
-	req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
-	if err != nil {
-		t.Fatalf("Error creating request: %v", err)
-	}
+	// Test the /protected endpoint (valid JWT)
+	t.Run("TestValidToken", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
 
-	// Add Authorization header with the generated token
-	req.Header.Set("Authorization", token)
+		// Add Authorization header with the generated token
+		req.Header.Set("Authorization", token)
 
-	client := &http.Client{}
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Fatalf("Error making GET request: %v", err)
-	}
-	defer resp.Body.Close()
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200 OK for protected route, got %v", resp.StatusCode)
-	}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status 200 OK for protected route, got %v", resp.StatusCode)
+		}
+	})
+
+	// Test invalid token (wrong token format)
+	t.Run("TestInvalidToken", func(t *testing.T) {
+		invalidToken := "Bearer invalid.token.here"
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
+
+		// Add invalid token in Authorization header
+		req.Header.Set("Authorization", invalidToken)
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for invalid token, got %v", resp.StatusCode)
+		}
+	})
+
+	// Test expired token
+	t.Run("TestExpiredToken", func(t *testing.T) {
+		// Create a token with a short expiry time (1 second)
+		expiredTokenResp, err := http.Get("http://localhost:8081/generate")
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer expiredTokenResp.Body.Close()
+
+		body, err := io.ReadAll(expiredTokenResp.Body)
+		if err != nil {
+			t.Fatalf("Error reading response body: %v", err)
+		}
+
+		if err := json.Unmarshal(body, &responseMap); err != nil {
+			t.Fatalf("Error unmarshalling response body: %v", err)
+		}
+
+		expiredToken := responseMap["token"]
+		// Modify the expiration time here if needed for testing purposes
+		time.Sleep(2 * time.Second) // Wait for the token to expire
+
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
+
+		// Add expired token in Authorization header
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", expiredToken))
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for expired token, got %v", resp.StatusCode)
+		}
+	})
+
+	// Test no token provided
+	t.Run("TestNoTokenProvided", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
+
+		// No Authorization header
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for no token, got %v", resp.StatusCode)
+		}
+	})
+
+	// Test revocation (blacklisting) scenario (stubbed out)
+	t.Run("TestTokenRevocation", func(t *testing.T) {
+		// Here you could mock or implement token revocation logic if applicable
+		// For now, we'll just show an example
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
+
+		// Assume token is blacklisted
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error making GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for revoked token, got %v", resp.StatusCode)
+		}
+	})
 }
-
-// curl http://localhost:8081/generate
