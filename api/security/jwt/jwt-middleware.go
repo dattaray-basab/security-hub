@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -20,8 +21,18 @@ func JWTMiddleware(publicKeyPath string, next http.HandlerFunc) http.HandlerFunc
             return
         }
 
+        // Log the token being parsed
+        fmt.Println("Parsing token:", tokenString)
+
         token, err := parseJWT(tokenString, publicKeyPath)
-        if err != nil || !token.Valid {
+        if err != nil {
+            fmt.Println("Error parsing token:", err)  // Log the error
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        if !token.Valid {
+            fmt.Println("Invalid token:", tokenString)  // Log if the token is not valid
             http.Error(w, "Invalid token", http.StatusUnauthorized)
             return
         }
