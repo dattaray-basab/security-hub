@@ -284,10 +284,7 @@ func TestRunJWTServer(t *testing.T) {
 
 	t.Run("TestTokenRefresh", func(t *testing.T) {
 		token := generateValidToken()
-		req, err := http.NewRequest("POST", "http://localhost:8081/refresh", nil)
-		if err != nil {
-			t.Fatalf("Error creating request: %v", err)
-		}
+		req, _ := http.NewRequest("POST", "http://localhost:8081/refresh", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		client := &http.Client{}
 		resp, err := client.Do(req)
@@ -306,7 +303,7 @@ func TestRunJWTServer(t *testing.T) {
 		concurrentRequests := 100
 		var wg sync.WaitGroup
 		wg.Add(concurrentRequests)
-		
+
 		for i := 0; i < concurrentRequests; i++ {
 			go func() {
 				defer wg.Done()
@@ -328,7 +325,7 @@ func TestRunJWTServer(t *testing.T) {
 				}
 			}()
 		}
-		
+
 		wg.Wait()
 	})
 }

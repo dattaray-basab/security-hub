@@ -50,13 +50,13 @@ func RunJWTServer() {
 	}))
 
 	http.HandleFunc("/refresh", JWTMiddleware(publicKeyPath, func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := r.Context().Value("claims").(jwt.MapClaims)
+		claims, ok := r.Context().Value(ClaimKey("claims")).(jwt.MapClaims)
 		if !ok {
 			http.Error(w, "Invalid claims", http.StatusUnauthorized)
 			return
 		}
 
-		userID, ok := claims["sub"].(string)
+		userID, ok := claims[string(SubjectKey)].(string)
 		if !ok {
 			http.Error(w, "Invalid user ID", http.StatusUnauthorized)
 			return
@@ -68,6 +68,7 @@ func RunJWTServer() {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(fmt.Sprintf(`{"token": "%s"}`, newToken)))
 	}))
 

@@ -21,11 +21,7 @@
       "request": "launch",
       "mode": "test",
       "program": "${workspaceFolder}/api/security/jwt/run-jwt_test.go",
-      "args": [
-        "-test.v",
-        "-test.run",
-        "TestRunJWTServer" // Use your specific test name here
-      ]
+      "args": ["-test.v", "-test.run", "TestRunJWTServer"]
     },
     {
       "name": "Run JWT Service",

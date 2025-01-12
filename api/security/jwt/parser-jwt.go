@@ -30,6 +30,14 @@ func parseJWT(tokenString, publicKeyPath string) (*jwt.Token, error) {
         return nil, fmt.Errorf("could not parse JWT token: %v", err)
     }
 
+    if claims, ok := token.Claims.(*jwt.StandardClaims); ok {
+        if claims.Issuer != "expected-issuer" {
+            return nil, fmt.Errorf("invalid issuer")
+        }
+    } else {
+        return nil, fmt.Errorf("invalid claims")
+    }
+
     return token, nil
 }
 
