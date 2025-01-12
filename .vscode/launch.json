@@ -16,12 +16,17 @@
       "args": []
     },
     {
-      "name": "Debug Go TestRunJWTServer",
+      "name": "Debug Go TestRunJWTServer with Race Detector",
       "type": "go",
       "request": "launch",
       "mode": "test",
       "program": "${workspaceFolder}/api/security/jwt/run-jwt_test.go",
-      "args": ["-test.v", "-test.run", "TestRunJWTServer"]
+      "args": [
+        "-test.v",
+        "run",
+        "TestRunJWTServer",
+        "--race" // Add the -race flag here
+      ]
     },
     {
       "name": "Run JWT Service",
