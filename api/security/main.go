@@ -1,14 +1,36 @@
 package main
 
-import "github.com/dattaray-basab/ssecurity-hub/api/security/keymgt"
+import (
+	"flag"
+	"log"
+
+	"github.com/dattaray-basab/ssecurity-hub/api/security/keymgt"
+)
 
 // "github.com/dattaray-basab/security-hub/api/security/keymgt"
 
 func main() {
-	// Initialize the in-memory key store (or replace with a persistent store if needed)
 
-	// Initialize the Gin router
-	keymgt.RunKeyMgt()
+	service := flag.String("service", "keymgt", "Specify the service to run (keymgt, jwt, oauth, openid)")
+	flag.Parse()
+
+	switch *service {
+	case "keymgt":
+		log.Println("Starting API Key Management Service...")
+		keymgt.RunKeyMgt()
+	// Placeholder cases for future services
+	case "jwt":
+		log.Println("Starting JWT Service...")
+		// jwt.RunJWTService()
+	case "oauth":
+		log.Println("Starting OAuth Service...")
+		// oauth.RunOAuthService()
+	case "openid":
+		log.Println("Starting OpenID Service...")
+		// openid.RunOpenIDService()
+	default:
+		log.Fatalf("Unknown service: %s", *service)
+	}
 }
 
 // to test using curl
