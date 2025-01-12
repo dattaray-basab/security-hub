@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/dattaray-basab/security-hub/api/security/jwt/jwt_handlers"
+	"github.com/dgrijalva/jwt-go"
 )
 
 // RunJWTServer handles the key generation (if needed) and starts the JWT API server.
@@ -46,6 +47,28 @@ func RunJWTServer() {
 	http.HandleFunc("/protected", JWTMiddleware(publicKeyPath, func(w http.ResponseWriter, r *http.Request) {
 		// This is the protected handler
 		w.Write([]byte("Access granted to protected route"))
+	}))
+
+	http.HandleFunc("/refresh", JWTMiddleware(publicKeyPath, func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value("claims").(jwt.MapClaims)
+		if !ok {
+			http.Error(w, "Invalid claims", http.StatusUnauthorized)
+			return
+		}
+
+		userID, ok := claims["sub"].(string)
+		if !ok {
+			http.Error(w, "Invalid user ID", http.StatusUnauthorized)
+			return
+		}
+
+		newToken, err := jwt_handlers.GenerateJWT(userID, privateKeyPath)
+		if err != nil {
+			http.Error(w, "Error generating new token", http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte(fmt.Sprintf(`{"token": "%s"}`, newToken)))
 	}))
 
 	// Start the server

@@ -1,9 +1,10 @@
 package jwt
 
 import (
-	"fmt"
+	"context"
 	"net/http"
-	"strings"
+
+	"github.com/dattaray-basab/security-hub/api/security/jwt/jwt_handlers"
 )
 
 // JWTMiddleware is a middleware function that checks the validity of a JWT
@@ -15,27 +16,26 @@ func JWTMiddleware(publicKeyPath string, next http.HandlerFunc) http.HandlerFunc
             return
         }
 
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        if tokenString == authHeader {
+        tokenString, err := jwt_handlers.ExtractTokenFromHeader(authHeader)
+        if err != nil {
             http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
             return
         }
 
-        // Log the token being parsed
-        fmt.Println("Parsing token:", tokenString)
-
-        token, err := parseJWT(tokenString, publicKeyPath)
+        publicKey, err := jwt_handlers.LoadPublicKey(publicKeyPath)
         if err != nil {
-            fmt.Println("Error parsing token:", err)  // Log the error
+            http.Error(w, "Error loading public key", http.StatusInternalServerError)
+            return
+        }
+
+        claims, err := jwt_handlers.ValidateToken(tokenString, publicKey)
+        if err != nil {
             http.Error(w, "Invalid token", http.StatusUnauthorized)
             return
         }
 
-        if !token.Valid {
-            fmt.Println("Invalid token:", tokenString)  // Log if the token is not valid
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
+        // You can now use the claims if needed
+        r = r.WithContext(context.WithValue(r.Context(), "claims", claims))
 
         next(w, r)
     }

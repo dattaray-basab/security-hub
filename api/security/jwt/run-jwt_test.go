@@ -3,10 +3,9 @@ package jwt
 import (
 	"crypto/rsa"
 	"fmt"
-	"sync"
-
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,6 +53,37 @@ func generateExpiredToken() string {
 	return signedToken
 }
 
+// Helper function to generate a valid JWT token
+func generateValidToken() string {
+	expirationTime := time.Now().Add(1 * time.Hour).Unix()
+
+	claims := jwt.StandardClaims{
+		ExpiresAt: expirationTime,
+		Issuer:    "test-issuer",
+		Subject:   "test-subject",
+	}
+
+	privateKeyPath := "./keys/private.key"
+	privateKey, err := loadRSAPrivateKeyFromFile(privateKeyPath)
+	if err != nil {
+		panic(fmt.Sprintf("Error loading private key: %v", err))
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signedToken, err := token.SignedString(privateKey)
+	if err != nil {
+		panic(fmt.Sprintf("Error signing the token: %v", err))
+	}
+
+	return signedToken
+}
+
+// Placeholder function for generating a revoked token
+func generateRevokedToken() string {
+	// For testing, this could simply be an invalid or blacklisted token
+	return "revoked-token"
+}
+
 // Full test suite for the JWT server
 func TestRunJWTServer(t *testing.T) {
 	// Set up keys
@@ -90,10 +120,9 @@ func TestRunJWTServer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error sending request: %v", err)
 		}
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-		if err == nil && resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
 			t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
 		}
 	})
@@ -158,25 +187,7 @@ func TestRunJWTServer(t *testing.T) {
 		}
 	})
 
-	t.Run("TestMalformedToken", func(t *testing.T) {
-		token := "not.a.validtoken"
-		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("Error sending request: %v", err)
-		}
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized for malformed token, got %d", resp.StatusCode)
-		}
-	})
-
 	t.Run("TestTokenRevocation", func(t *testing.T) {
-		// Assumes generateRevokedToken() exists for generating a revoked token
 		token := generateRevokedToken()
 
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
@@ -197,14 +208,38 @@ func TestRunJWTServer(t *testing.T) {
 		}
 	})
 
+	t.Run("TestMalformedToken", func(t *testing.T) {
+		token := "not.a.validtoken"
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for malformed token, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("TestWrongAlgorithmToken", func(t *testing.T) {
 		claims := jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(time.Hour).Unix(),
 			Issuer:    "test",
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		tokenString, _ := token.SignedString([]byte("secret"))
-		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		tokenString, err := token.SignedString([]byte("secret"))
+		if err != nil {
+			t.Fatalf("Error signing token: %v", err)
+		}
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenString))
 		client := &http.Client{}
 		resp, err := client.Do(req)
@@ -223,12 +258,24 @@ func TestRunJWTServer(t *testing.T) {
 			"iss": "unexpected-issuer",
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		privateKey, _ := loadRSAPrivateKeyFromFile("./keys/private.key")
-		tokenString, _ := token.SignedString(privateKey)
-		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		privateKey, err := loadRSAPrivateKeyFromFile("./keys/private.key")
+		if err != nil {
+			t.Fatalf("Error loading private key: %v", err)
+		}
+		tokenString, err := token.SignedString(privateKey)
+		if err != nil {
+			t.Fatalf("Error signing token: %v", err)
+		}
+		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenString))
 		client := &http.Client{}
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("Expected status 401 Unauthorized for token with invalid claims, got %d", resp.StatusCode)
@@ -236,20 +283,21 @@ func TestRunJWTServer(t *testing.T) {
 	})
 
 	t.Run("TestTokenRefresh", func(t *testing.T) {
-		// First, get a valid token
 		token := generateValidToken()
-
-		// Then, attempt to refresh it
-		req, _ := http.NewRequest("POST", "http://localhost:8081/refresh", nil)
+		req, err := http.NewRequest("POST", "http://localhost:8081/refresh", nil)
+		if err != nil {
+			t.Fatalf("Error creating request: %v", err)
+		}
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		client := &http.Client{}
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
 		defer resp.Body.Close()
-
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("Expected status 200 OK for token refresh, got %d", resp.StatusCode)
 		}
-
 		// You might also want to check that the new token is different and valid
 	})
 
@@ -258,53 +306,29 @@ func TestRunJWTServer(t *testing.T) {
 		concurrentRequests := 100
 		var wg sync.WaitGroup
 		wg.Add(concurrentRequests)
-
+		
 		for i := 0; i < concurrentRequests; i++ {
 			go func() {
 				defer wg.Done()
-				req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+				req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+				if err != nil {
+					t.Errorf("Error creating request: %v", err)
+					return
+				}
 				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 				client := &http.Client{}
-				resp, _ := client.Do(req)
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Errorf("Error sending request: %v", err)
+					return
+				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
 					t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
 				}
 			}()
 		}
-
+		
 		wg.Wait()
 	})
-
-}
-
-// Helper function to generate a valid JWT token
-func generateValidToken() string {
-	expirationTime := time.Now().Add(1 * time.Hour).Unix()
-
-	claims := jwt.StandardClaims{
-		ExpiresAt: expirationTime,
-		Issuer:    "test-issuer",
-		Subject:   "test-subject",
-	}
-
-	privateKeyPath := "./keys/private.key"
-	privateKey, err := loadRSAPrivateKeyFromFile(privateKeyPath)
-	if err != nil {
-		panic(fmt.Sprintf("Error loading private key: %v", err))
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	signedToken, err := token.SignedString(privateKey)
-	if err != nil {
-		panic(fmt.Sprintf("Error signing the token: %v", err))
-	}
-
-	return signedToken
-}
-
-// Placeholder function for generating a revoked token
-func generateRevokedToken() string {
-	// For testing, this could simply be an invalid or blacklisted token
-	return "revoked-token"
 }
