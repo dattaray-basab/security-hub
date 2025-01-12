@@ -3,7 +3,7 @@ package keymgt
 import (
 	"log"
 
-	"github.com/dattaray-basab/ssecurity-hub/api/security/keymgt/keymgt_handlers"
+	"github.com/dattaray-basab/security-hub/api/security/keymgt/keymgt_handlers"
 	"github.com/gin-gonic/gin"
 )
 

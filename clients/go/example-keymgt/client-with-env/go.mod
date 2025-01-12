@@ -1,4 +1,4 @@
-module github.com/dattaray-basab/ssecurity-hub/clients/go/example-keymgt/client-with-env
+module github.com/dattaray-basab/security-hub/clients/go/example-keymgt/client-with-env
 
 go 1.22.1
 
