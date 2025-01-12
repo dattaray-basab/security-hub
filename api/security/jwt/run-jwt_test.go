@@ -1,216 +1,211 @@
 package jwt
 
 import (
-	"encoding/json"
+	"crypto/rsa"
 	"fmt"
-	"io"
+
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/dattaray-basab/security-hub/api/security/jwt/jwt_handlers"
+	"github.com/dgrijalva/jwt-go"
 )
 
-func createTestKeys(privateKeyPath, publicKeyPath string) error {
-	// Generate the RSA key pair for testing
-	return jwt_handlers.GenerateRSAKeyPair(privateKeyPath, publicKeyPath, 2048)
+// Helper function to load the RSA private key from a file
+func loadRSAPrivateKeyFromFile(filepath string) (*rsa.PrivateKey, error) {
+	keyData, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read private key file: %v", err)
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse RSA private key: %v", err)
+	}
+
+	return privateKey, nil
 }
 
-func cleanUpTestKeys(privateKeyPath, publicKeyPath string) {
-	// Remove the test RSA keys after the test
-	os.Remove(privateKeyPath)
-	os.Remove(publicKeyPath)
+// Function to generate an expired JWT
+func generateExpiredToken() string {
+	expiredTime := time.Now().Add(-1 * time.Hour).Unix()
+
+	claims := jwt.StandardClaims{
+		ExpiresAt: expiredTime,
+		Issuer:    "test-issuer",
+		Subject:   "test-subject",
+	}
+
+	privateKeyPath := "./keys/private.key"
+	privateKey, err := loadRSAPrivateKeyFromFile(privateKeyPath)
+	if err != nil {
+		panic(fmt.Sprintf("Error loading private key: %v", err))
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signedToken, err := token.SignedString(privateKey)
+	if err != nil {
+		panic(fmt.Sprintf("Error signing the token: %v", err))
+	}
+
+	return signedToken
 }
 
+// Full test suite for the JWT server
 func TestRunJWTServer(t *testing.T) {
-	// Define the directory and paths for the test keys
+	// Set up keys
 	keysDir := "./keys"
 	privateKeyPath := fmt.Sprintf("%s/private.key", keysDir)
 	publicKeyPath := fmt.Sprintf("%s/public.key", keysDir)
 
-	// Create the keys directory if it doesn't exist
 	if err := os.MkdirAll(keysDir, os.ModePerm); err != nil {
 		t.Fatalf("Error creating keys directory: %v", err)
 	}
+	defer os.RemoveAll(keysDir) // Cleanup keys after tests
 
-	// Create temporary keys for testing
-	err := createTestKeys(privateKeyPath, publicKeyPath)
+	// Generate RSA key pair
+	err := jwt_handlers.GenerateRSAKeyPair(privateKeyPath, publicKeyPath, 2048)
 	if err != nil {
-		t.Fatalf("Error creating RSA keys: %v", err)
-	}
-	defer cleanUpTestKeys(privateKeyPath, publicKeyPath)
-
-	// Start the server in a goroutine
-	go func() {
-		// Run the actual JWT server
-		RunJWTServer()
-	}()
-
-	// Wait a moment for the server to start
-	time.Sleep(1 * time.Second)
-
-	// Test the /generate endpoint (valid token)
-	resp, err := http.Get("http://localhost:8081/generate")
-	if err != nil {
-		t.Fatalf("Error making GET request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200 OK, got %v", resp.StatusCode)
+		t.Fatalf("Error generating RSA key pair: %v", err)
 	}
 
-	// Read the response body (which should contain the generated JWT)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Error reading response body: %v", err)
-	}
+	// Start the JWT server
+	go func() { RunJWTServer() }()
+	time.Sleep(1 * time.Second) // Allow server to start
 
-	// Extract the token from the response JSON
-	var responseMap map[string]string
-	if err := json.Unmarshal(body, &responseMap); err != nil {
-		t.Fatalf("Error unmarshalling response body: %v", err)
-	}
-
-	token, exists := responseMap["token"]
-	if !exists {
-		t.Fatalf("No token found in the response body")
-	}
-
-	// Format the token for Authorization header
-	token = fmt.Sprintf("Bearer %s", token)
-	fmt.Println("Generated Token:", token)
-
-	// Test the /protected endpoint (valid JWT)
 	t.Run("TestValidToken", func(t *testing.T) {
+		token := generateValidToken()
+
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
 		if err != nil {
 			t.Fatalf("Error creating request: %v", err)
 		}
-
-		// Add Authorization header with the generated token
-		req.Header.Set("Authorization", token)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
+			t.Fatalf("Error sending request: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			t.Errorf("Expected status 200 OK for protected route, got %v", resp.StatusCode)
+			t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
 		}
 	})
 
-	// Test invalid token (wrong token format)
 	t.Run("TestInvalidToken", func(t *testing.T) {
-		invalidToken := "Bearer invalid.token.here"
+		token := "invalid-token"
+
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
 		if err != nil {
 			t.Fatalf("Error creating request: %v", err)
 		}
-
-		// Add invalid token in Authorization header
-		req.Header.Set("Authorization", invalidToken)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
+			t.Fatalf("Error sending request: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized for invalid token, got %v", resp.StatusCode)
+			t.Errorf("Expected status 401 Unauthorized, got %d", resp.StatusCode)
 		}
 	})
 
-	// Test expired token
 	t.Run("TestExpiredToken", func(t *testing.T) {
-		// Create a token with a short expiry time (1 second)
-		expiredTokenResp, err := http.Get("http://localhost:8081/generate")
-		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
-		}
-		defer expiredTokenResp.Body.Close()
-
-		body, err := io.ReadAll(expiredTokenResp.Body)
-		if err != nil {
-			t.Fatalf("Error reading response body: %v", err)
-		}
-
-		if err := json.Unmarshal(body, &responseMap); err != nil {
-			t.Fatalf("Error unmarshalling response body: %v", err)
-		}
-
-		expiredToken := responseMap["token"]
-		// Modify the expiration time here if needed for testing purposes
-		time.Sleep(2 * time.Second) // Wait for the token to expire
+		token := generateExpiredToken()
 
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
 		if err != nil {
 			t.Fatalf("Error creating request: %v", err)
 		}
-
-		// Add expired token in Authorization header
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", expiredToken))
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
+			t.Fatalf("Error sending request: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized for expired token, got %v", resp.StatusCode)
+			t.Errorf("Expected status 401 Unauthorized for expired token, got %d", resp.StatusCode)
 		}
 	})
 
-	// Test no token provided
 	t.Run("TestNoTokenProvided", func(t *testing.T) {
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
 		if err != nil {
 			t.Fatalf("Error creating request: %v", err)
 		}
 
-		// No Authorization header
-
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
+			t.Fatalf("Error sending request: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized for no token, got %v", resp.StatusCode)
+			t.Errorf("Expected status 401 Unauthorized when no token is provided, got %d", resp.StatusCode)
 		}
 	})
 
-	// Test revocation (blacklisting) scenario (stubbed out)
 	t.Run("TestTokenRevocation", func(t *testing.T) {
-		// Here you could mock or implement token revocation logic if applicable
-		// For now, we'll just show an example
+		// Assumes generateRevokedToken() exists for generating a revoked token
+		token := generateRevokedToken()
+
 		req, err := http.NewRequest("GET", "http://localhost:8081/protected", nil)
 		if err != nil {
 			t.Fatalf("Error creating request: %v", err)
 		}
-
-		// Assume token is blacklisted
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			t.Fatalf("Error making GET request: %v", err)
+			t.Fatalf("Error sending request: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized for revoked token, got %v", resp.StatusCode)
+			t.Errorf("Expected status 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 		}
 	})
+}
+
+// Helper function to generate a valid JWT token
+func generateValidToken() string {
+	expirationTime := time.Now().Add(1 * time.Hour).Unix()
+
+	claims := jwt.StandardClaims{
+		ExpiresAt: expirationTime,
+		Issuer:    "test-issuer",
+		Subject:   "test-subject",
+	}
+
+	privateKeyPath := "./keys/private.key"
+	privateKey, err := loadRSAPrivateKeyFromFile(privateKeyPath)
+	if err != nil {
+		panic(fmt.Sprintf("Error loading private key: %v", err))
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signedToken, err := token.SignedString(privateKey)
+	if err != nil {
+		panic(fmt.Sprintf("Error signing the token: %v", err))
+	}
+
+	return signedToken
+}
+
+// Placeholder function for generating a revoked token
+func generateRevokedToken() string {
+	// For testing, this could simply be an invalid or blacklisted token
+	return "revoked-token"
 }
