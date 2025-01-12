@@ -16,18 +16,15 @@
       "args": []
     },
     {
-      "name": "Debug Specific Unit Test",
+      "name": "Debug Go TestRunJWTServer",
       "type": "go",
       "request": "launch",
       "mode": "test",
-      "program": "${workspaceFolder}/api/security//handlers/key-management_test.go",
-      "env": {
-        "PORT": "8081"
-      },
+      "program": "${workspaceFolder}/api/security/jwt/run-jwt_test.go",
       "args": [
         "-test.v",
         "-test.run",
-        "TestAPIKeyFlow" // Name of the specific test function you want to run
+        "TestRunJWTServer" // Use your specific test name here
       ]
     },
     {
