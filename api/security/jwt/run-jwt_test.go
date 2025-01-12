@@ -35,7 +35,7 @@ func generateExpiredToken() string {
 	claims := jwt.StandardClaims{
 		ExpiresAt: expiredTime,
 		Issuer:    "test-issuer",
-		Subject:   "test-subject",
+		Subject:   "expected-test-user",
 	}
 
 	privateKeyPath := "./keys/private.key"
@@ -60,7 +60,7 @@ func generateValidToken() string {
 	claims := jwt.StandardClaims{
 		ExpiresAt: expirationTime,
 		Issuer:    "test-issuer",
-		Subject:   "test-subject",
+		Subject:   "expected-test-user",
 	}
 
 	privateKeyPath := "./keys/private.key"

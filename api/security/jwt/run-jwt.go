@@ -57,13 +57,13 @@ func RunJWTServer() {
 		}
 
 		subjectKey, ok := claims[string(SubjectKey)].(string)
-		if !ok || subjectKey != "test-subject" {
+		if !ok || subjectKey != "expected-test-user" {
 			http.Error(w, "Invalid subject key", http.StatusUnauthorized)
 			return
 		}
 
 		// Generate a new token
-		newToken, err := jwt_handlers.GenerateJWT(userID, privateKeyPath)
+		newToken, err := jwt_handlers.GenerateJWT(subjectKey, privateKeyPath)
 		if err != nil {
 			http.Error(w, "Error generating new token", http.StatusInternalServerError)
 			return
