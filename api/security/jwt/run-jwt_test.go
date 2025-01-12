@@ -3,6 +3,7 @@ package jwt
 import (
 	"crypto/rsa"
 	"fmt"
+	"sync"
 
 	"net/http"
 	"os"
@@ -89,9 +90,10 @@ func TestRunJWTServer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error sending request: %v", err)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+		if err == nil && resp.StatusCode != http.StatusOK {
 			t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
 		}
 	})
@@ -156,6 +158,23 @@ func TestRunJWTServer(t *testing.T) {
 		}
 	})
 
+	t.Run("TestMalformedToken", func(t *testing.T) {
+		token := "not.a.validtoken"
+		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for malformed token, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("TestTokenRevocation", func(t *testing.T) {
 		// Assumes generateRevokedToken() exists for generating a revoked token
 		token := generateRevokedToken()
@@ -177,6 +196,86 @@ func TestRunJWTServer(t *testing.T) {
 			t.Errorf("Expected status 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 		}
 	})
+
+	t.Run("TestWrongAlgorithmToken", func(t *testing.T) {
+		claims := jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(time.Hour).Unix(),
+			Issuer:    "test",
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte("secret"))
+		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenString))
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for token with wrong algorithm, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("TestInvalidClaimToken", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"exp": time.Now().Add(time.Hour).Unix(),
+			"iss": "unexpected-issuer",
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		privateKey, _ := loadRSAPrivateKeyFromFile("./keys/private.key")
+		tokenString, _ := token.SignedString(privateKey)
+		req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenString))
+		client := &http.Client{}
+		resp, _ := client.Do(req)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized for token with invalid claims, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("TestTokenRefresh", func(t *testing.T) {
+		// First, get a valid token
+		token := generateValidToken()
+
+		// Then, attempt to refresh it
+		req, _ := http.NewRequest("POST", "http://localhost:8081/refresh", nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		client := &http.Client{}
+		resp, _ := client.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status 200 OK for token refresh, got %d", resp.StatusCode)
+		}
+
+		// You might also want to check that the new token is different and valid
+	})
+
+	t.Run("TestConcurrentRequests", func(t *testing.T) {
+		token := generateValidToken()
+		concurrentRequests := 100
+		var wg sync.WaitGroup
+		wg.Add(concurrentRequests)
+
+		for i := 0; i < concurrentRequests; i++ {
+			go func() {
+				defer wg.Done()
+				req, _ := http.NewRequest("GET", "http://localhost:8081/protected", nil)
+				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+				client := &http.Client{}
+				resp, _ := client.Do(req)
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
+				}
+			}()
+		}
+
+		wg.Wait()
+	})
+
 }
 
 // Helper function to generate a valid JWT token
