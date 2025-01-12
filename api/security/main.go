@@ -26,7 +26,7 @@ func main() {
 		log.Println("Starting OAuth Service...")
 		// oauth.RunOAuthService()
 
-	case "openid":
+	case "oidc":
 		log.Println("Starting OpenID Service...")
 		// openid.RunOpenIDService()
 
