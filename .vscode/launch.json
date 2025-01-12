@@ -1,0 +1,46 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch API Key Management",
+      "type": "go",
+      "request": "launch",
+      "program": "${workspaceFolder}/api/security/main.go",
+      "env": {
+        "PORT": "8080"
+      },
+      "args": []
+    },
+    {
+      "name": "Debug Specific Unit Test",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/api/security//handlers/key-management_test.go",
+      "env": {
+        "PORT": "8080"
+      },
+      "args": [
+        "-test.v",
+        "-test.run",
+        "TestAPIKeyFlow" // Name of the specific test function you want to run
+      ]
+    },
+    {
+      "name": "Launch Client with Env App",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/client-with-env/hidden-key-app.go",
+      "env": {
+        "API_KEY": "${workspaceFolder}/client-with-env/.env"
+      },
+      "args": [],
+      "showLog": true
+    }
+  ]
+}
