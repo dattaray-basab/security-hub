@@ -18,7 +18,7 @@ func main() {
 		log.Println("Starting API Key Management Service...")
 		keymgt.RunKeyMgt()
 
-	case "jwt":
+	case "jwt": // go run . -service=jwt
 		log.Println("Starting JWT Service...")
 		jwt.RunJWTServer()
 
