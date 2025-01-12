@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/dattaray-basab/security-hub/api/security/keymgt"
-	"github.com/dattaray-basab/security-hub/api/security/jwt/jwt_handlers"
+	"github.com/dattaray-basab/security-hub/api/security/jwt"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 
 	case "jwt":
 		log.Println("Starting JWT Service...")
-		jwt_handlers.RunJWTServer()
+		jwt.RunJWTServer()
 
 	case "oauth":
 		log.Println("Starting OAuth Service...")

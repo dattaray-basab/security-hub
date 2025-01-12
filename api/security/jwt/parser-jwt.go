@@ -1,4 +1,4 @@
-package jwt_handlers
+package jwt
 
 import (
 	"fmt"
