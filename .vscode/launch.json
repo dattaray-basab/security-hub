@@ -28,6 +28,14 @@
       ]
     },
     {
+      "name": "Run JWT Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/api/security",
+      "args": ["-service=jwt"]
+    },
+    {
       "name": "Launch Client with Env App",
       "type": "go",
       "request": "launch",

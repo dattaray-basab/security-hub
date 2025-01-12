@@ -1,30 +1,31 @@
 package jwt
 
 import (
-	"fmt"
 	"net/http"
-
+	"strings"
 )
 
 // JWTMiddleware is a middleware function that checks the validity of a JWT
-// JWTMiddleware is a middleware that validates the JWT token in the request header.
 func JWTMiddleware(publicKeyPath string, next http.HandlerFunc) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // Extract the JWT token from the Authorization header
-        tokenString := r.Header.Get("Authorization")
-        if tokenString == "" {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
             http.Error(w, "Authorization header missing", http.StatusUnauthorized)
             return
         }
 
-        // Parse and validate the JWT token
-        _, err := parseJWT(tokenString, publicKeyPath)
-        if err != nil {
-            http.Error(w, fmt.Sprintf("Invalid token: %v", err), http.StatusUnauthorized)
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        if tokenString == authHeader {
+            http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
             return
         }
 
-        // If the token is valid, call the next handler
+        token, err := parseJWT(tokenString, publicKeyPath)
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
         next(w, r)
     }
 }
