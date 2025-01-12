@@ -57,21 +57,33 @@ func RunJWTServer() {
 		}
 
 		subjectKey, ok := claims[string(SubjectKey)].(string)
-		if !ok  {
-			http.Error(w, "Invalid subject key", http.StatusUnauthorized)
-			return
-		}
-		if subjectKey != "test-subject" {
+		if !ok || subjectKey != "test-subject" {
 			http.Error(w, "Invalid subject key", http.StatusUnauthorized)
 			return
 		}
 
+		// Generate a new token
 		newToken, err := jwt_handlers.GenerateJWT(userID, privateKeyPath)
 		if err != nil {
 			http.Error(w, "Error generating new token", http.StatusInternalServerError)
 			return
 		}
 
+		// Validate the newly generated token
+		_, err = jwt.Parse(newToken, func(token *jwt.Token) (interface{}, error) {
+			publicKey, err := jwt_handlers.LoadPublicKey(publicKeyPath)
+			if err != nil {
+				return nil, err
+			}
+			return publicKey, nil
+		})
+
+		if err != nil {
+			http.Error(w, "Newly generated token is invalid", http.StatusInternalServerError)
+			return
+		}
+
+		// If validation is successful, send the new token back in the response
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(fmt.Sprintf(`{"token": "%s"}`, newToken)))
 	}))
