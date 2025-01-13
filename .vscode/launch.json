@@ -29,6 +29,19 @@
       ]
     },
     {
+      "name": "Debug Go TestRunOAuthService with Race Detector",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/api/security/oauth/oauth_service_test.go",
+      "args": [
+        "-test.v",
+        "run",
+        "TestRunOAuthService"
+        // "--race" // Add the -race flag here
+      ]
+    },
+    {
       "name": "Run JWT Service",
       "type": "go",
       "request": "launch",
